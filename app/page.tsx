@@ -1,101 +1,171 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [message, setMessage] = useState('');
+  const [history, setHistory] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [tokens, setTokens] = useState({ input: 0, output: 0 });
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const send = async () => {
+    if (!message.trim() || loading) return;
+
+    const userMsg = message.trim();
+    setMessage('');
+    setLoading(true);
+    setError('');
+
+    const newHistory: Message[] = [
+      ...history,
+      { role: 'user', content: userMsg },
+    ];
+    setHistory(newHistory);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMsg,
+          history: history,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setError(data.error || '请求失败');
+        setHistory(history);
+        setMessage(userMsg);
+      } else {
+        setHistory([
+          ...newHistory,
+          { role: 'assistant', content: data.reply },
+        ]);
+        setTokens(prev => ({
+          input: prev.input + (data.usage?.input_tokens || 0),
+          output: prev.output + (data.usage?.output_tokens || 0),
+        }));
+      }
+    } catch (e: any) {
+      setError(e.message || '网络错误');
+      setHistory(history);
+      setMessage(userMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearChat = () => {
+    setHistory([]);
+    setTokens({ input: 0, output: 0 });
+    setError('');
+  };
+
+  return (
+    <main className="min-h-screen p-4 md:p-8 max-w-3xl mx-auto">
+      <header className="mb-6">
+        <h1 className="text-3xl font-bold mb-1">LLM Agent Lab</h1>
+        <p className="text-gray-500 text-sm">
+          第一段对话 demo · 角色：艾琳 · 累计 {tokens.input + tokens.output} tokens
+        </p>
+      </header>
+
+      <div className="border rounded-xl p-4 min-h-[500px] mb-4 bg-gradient-to-b from-gray-50 to-white">
+        {history.length === 0 && (
+          <div className="text-center text-gray-400 mt-20">
+            <p className="text-lg mb-2">开始与艾琳对话...</p>
+            <p className="text-sm">试试说：你好 / 你是谁 / 你喜欢什么</p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {history.map((msg, i) => (
+            <div
+              key={i}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[80%] p-3 rounded-2xl ${
+                  msg.role === 'user'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white border shadow-sm'
+                }`}
+              >
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {msg.content}
+                </p>
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-white border shadow-sm p-3 rounded-2xl">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          错误：{error}
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-3">
+        <input
+          className="flex-1 border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+          placeholder="输入消息，回车发送..."
+          disabled={loading}
+        />
+        <button
+          className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={send}
+          disabled={loading || !message.trim()}
         >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          {loading ? '发送中...' : '发送'}
+        </button>
+      </div>
+
+      {history.length > 0 && (
+        <button
+          onClick={clearChat}
+          className="text-sm text-gray-500 hover:text-gray-700"
         >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+          清空对话
+        </button>
+      )}
+
+      <footer className="mt-12 pt-6 border-t text-center text-xs text-gray-400">
+        <p>LLM Agent Lab · MVP v0.1 · DeepSeek 驱动</p>
+        <p className="mt-1">
+          <a href="https://github.com/NewOne0712/llm-agent-lab" className="hover:underline">
+            GitHub
+          </a>
+        </p>
       </footer>
-    </div>
+    </main>
   );
 }
